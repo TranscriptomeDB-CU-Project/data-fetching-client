@@ -15,16 +15,18 @@ func worker_fetch_accession(wg *sync.WaitGroup, queue chan string) {
 	defer wg.Done()
 
 	for job := range queue {
+		fmt.Println("Start Accession: ", job)
+
+		if _, err := os.Stat(fmt.Sprintf("sdrf/%s.sdrf.csv", job)); err == nil {
+			fmt.Println("Skip: ", job)
+			continue
+		}
+
 		data_byte, err := utils.FetchAccession(job)
 
 		if err != nil {
 			fmt.Println(err)
 			return
-		}
-
-		if _, err := os.Stat(fmt.Sprintf("sdrf/%s.sdrf.csv", job)); err == nil {
-			fmt.Println("Skip: ", job)
-			continue
 		}
 
 		fp, err := os.OpenFile(fmt.Sprintf("sdrf/%s.sdrf.csv", job), os.O_RDWR|os.O_CREATE, 0755)
@@ -41,6 +43,8 @@ func worker_fetch_accession(wg *sync.WaitGroup, queue chan string) {
 
 		time.Sleep(50 * time.Millisecond)
 	}
+
+	fmt.Println("Shutdown Accession worker")
 }
 
 func worker_fetch_search(wg *sync.WaitGroup, queue chan int, result_queue chan string) {
@@ -48,6 +52,8 @@ func worker_fetch_search(wg *sync.WaitGroup, queue chan int, result_queue chan s
 
 	for job := range queue {
 		var body dtos.SearchResult
+
+		fmt.Println("Start Page: ", job)
 
 		err := utils.FetchSearch(job, &body)
 
@@ -64,6 +70,8 @@ func worker_fetch_search(wg *sync.WaitGroup, queue chan int, result_queue chan s
 
 		time.Sleep(100 * time.Millisecond)
 	}
+
+	fmt.Println("Shutdown Search worker")
 }
 
 func main() {
@@ -76,7 +84,7 @@ func main() {
 		return
 	}
 
-	totalPages := int(math.Ceil(float64(body.TotalHits) / float64(body.PageSize)))
+	totalPages := int(math.Min(math.Ceil(float64(body.TotalHits)/float64(body.PageSize)), 5))
 
 	wg := sync.WaitGroup{}
 	queue := make(chan int, constants.WORKER_NUMBER)
@@ -95,19 +103,22 @@ func main() {
 		go worker_fetch_search(&wg, queue, accession_queue)
 	}
 
-	for i := 1; i <= constants.WORKER_NUMBER*5; i++ {
+	for i := 1; i <= constants.WORKER_NUMBER; i++ {
 		wg_fetch_sdrf.Add(1)
 		go worker_fetch_accession(&wg_fetch_sdrf, accession_queue)
 	}
 
 	for i := 1; i <= totalPages; i++ {
-		wg_fetch_sdrf.Add(1)
 		queue <- i
 	}
 
+	close(queue)
 	wg.Wait()
+
+	fmt.Println("Done Search")
+
+	close(accession_queue)
 	wg_fetch_sdrf.Wait()
 
-	close(queue)
-	close(accession_queue)
+	fmt.Println("Done Accession")
 }

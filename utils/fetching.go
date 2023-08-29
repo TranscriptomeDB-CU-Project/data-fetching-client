@@ -6,45 +6,43 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"time"
 )
 
-func FetchWithRetry(url string) (*http.Response, error) {
+func FetchWithRetry(url string, retry int) (*http.Response, error) {
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
 	var res *http.Response
 	var err error
 
-	retry := 250
+	res, err = client.Get(url)
 
-	for {
-		res, err = http.Get(url)
+	// Network timeout or Rate Limit, let's do binary exponential backoff
+	if err != nil || res.StatusCode == 429 {
+		fmt.Printf("retry %s %s\n", url, err)
 
-		// Network timeout or Rate Limit, let's do binary exponential backoff
-		if err != nil || res.StatusCode == 429 {
-			fmt.Printf("retry: %s\n", url)
+		time.Sleep(time.Duration(rand.Intn(retry)) * time.Millisecond)
 
-			time.Sleep(time.Duration(retry) * time.Millisecond)
+		return FetchWithRetry(url, retry*2)
+	}
 
-			retry *= 2
-			continue
-		}
+	if res.StatusCode != 200 {
+		err = fmt.Errorf("fetch failed: %s", res.Status)
 
-		if res.StatusCode != 200 {
-			err = fmt.Errorf("fetch failed: %s", res.Status)
-
-			return nil, err
-		}
-
-		break
+		return nil, err
 	}
 
 	return res, nil
 }
 
 func FetchSearch(page int, target *dtos.SearchResult) error {
-	fetch_url := fmt.Sprintf("%s/arrayexpress/search?page=%d&pageSize=100", constants.API_URL, page)
+	fetch_url := fmt.Sprintf("%s/arrayexpress/search?page=%d&pageSize=50", constants.API_URL, page)
 
-	res, err := FetchWithRetry(fetch_url)
+	res, err := FetchWithRetry(fetch_url, 250)
 
 	if err != nil {
 		return err
@@ -61,7 +59,7 @@ func FetchSearch(page int, target *dtos.SearchResult) error {
 func FetchAccession(accession string) ([]byte, error) {
 	url := fmt.Sprintf("%s/%s/%s.sdrf.txt", constants.FILE_BASE_URL, accession, accession)
 
-	res, err := FetchWithRetry(url)
+	res, err := FetchWithRetry(url, 250)
 
 	if err != nil {
 		return nil, err
