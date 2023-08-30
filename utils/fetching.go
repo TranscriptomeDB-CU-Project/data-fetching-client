@@ -13,7 +13,7 @@ import (
 
 func FetchWithRetry(url string, retry int) (*http.Response, error) {
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 
 	var res *http.Response
@@ -31,7 +31,7 @@ func FetchWithRetry(url string, retry int) (*http.Response, error) {
 	}
 
 	if res.StatusCode != 200 {
-		err = fmt.Errorf("fetch failed: %s", res.Status)
+		err = fmt.Errorf("fetch failed: %s %s", res.Status, url)
 
 		return nil, err
 	}
@@ -56,7 +56,23 @@ func FetchSearch(page int, target *dtos.SearchResult) error {
 	return err
 }
 
-func FetchAccession(accession string) ([]byte, error) {
+func FetchAccessionInfo(accession string, target *dtos.StudyInfo) error {
+	fetch_url := fmt.Sprintf("%s/studies/%s/info", constants.API_URL, accession)
+
+	res, err := FetchWithRetry(fetch_url, 250)
+
+	if err != nil {
+		return err
+	}
+
+	defer res.Body.Close()
+
+	err = json.NewDecoder(res.Body).Decode(target)
+
+	return err
+}
+
+func FetchAccessionSDRFFile(accession string) ([]byte, error) {
 	url := fmt.Sprintf("%s/%s/%s.sdrf.txt", constants.FILE_BASE_URL, accession, accession)
 
 	res, err := FetchWithRetry(url, 250)

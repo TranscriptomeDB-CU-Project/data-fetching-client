@@ -11,3 +11,8 @@ type Study struct {
 	Views        int    `json:"views"`
 	IsPublic     bool   `json:"isPublic"`
 }
+
+type StudyInfo struct {
+	Released int `json:"released"`
+	Modified int `json:"modified"`
+}
