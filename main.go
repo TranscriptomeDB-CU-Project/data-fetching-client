@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,45 +15,60 @@ import (
 func worker_fetch_accession(wg *sync.WaitGroup, queue chan string, metadata map[string]int) {
 	defer wg.Done()
 
-	for job := range queue {
-		fmt.Println("Start Accession: ", job)
+	for accession := range queue {
+		fmt.Println("Start Accession: ", accession)
 
-		if _, err := os.Stat(fmt.Sprintf("sdrf/%s.sdrf.csv", job)); err == nil {
-			fmt.Println("Skip: ", job)
-			continue
-		}
+		var file_result dtos.SearchFileResult
 
-		data_byte, err := utils.FetchAccessionSDRFFile(job)
+		err := utils.FetchSDRFFileList(accession, &file_result)
 
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
 
-		fp, err := os.OpenFile(fmt.Sprintf("sdrf/%s.sdrf.csv", job), os.O_RDWR|os.O_CREATE, 0755)
+		for _, file := range file_result.Files {
+			new_file_name, _ := strings.CutSuffix(file.Name, ".sdrf.txt")
 
-		if err != nil {
-			fmt.Println("Read Failed: ", err)
-			continue
+			if _, err := os.Stat(fmt.Sprintf("sdrf/%s.sdrf.csv", new_file_name)); err == nil {
+				fmt.Println("Skip: ", file.Name)
+				continue
+			}
+
+			data_byte, err := utils.FetchAccessionSDRFFile(accession, file.Name)
+
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			fp, err := os.OpenFile(fmt.Sprintf("sdrf/%s.sdrf.csv", new_file_name), os.O_RDWR|os.O_CREATE, 0755)
+
+			if err != nil {
+				fmt.Println("Read Failed: ", err)
+				continue
+			}
+
+			fp.Write(data_byte)
+			fp.Close()
+
+			var target dtos.StudyInfo
+
+			err = utils.FetchAccessionInfo(accession, &target)
+
+			if err != nil {
+				fmt.Println("Failed to fetch", err)
+				continue
+			}
+
+			fmt.Println("Done Accession: ", file.Name)
+
+			metadata[new_file_name] = target.Modified
+
+			time.Sleep(200 * time.Millisecond)
 		}
 
-		fp.Write(data_byte)
-		fp.Close()
-
-		var target dtos.StudyInfo
-
-		err = utils.FetchAccessionInfo(job, &target)
-
-		if err != nil {
-			fmt.Println("Failed to fetch", err)
-			continue
-		}
-
-		fmt.Println("Done Accession: ", job)
-
-		metadata[job] = target.Modified
-
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	fmt.Println("Shutdown Accession worker")
@@ -61,25 +77,25 @@ func worker_fetch_accession(wg *sync.WaitGroup, queue chan string, metadata map[
 func worker_fetch_search(wg *sync.WaitGroup, queue chan int, result_queue chan string) {
 	defer wg.Done()
 
-	for job := range queue {
+	for accession := range queue {
 		var body dtos.SearchResult
 
-		fmt.Println("Start Page: ", job)
+		fmt.Println("Start Page: ", accession)
 
-		err := utils.FetchSearch(job, &body)
+		err := utils.FetchSearch(accession, &body)
 
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		fmt.Println("Done Page: ", job)
+		fmt.Println("Done Page: ", accession)
 
 		for _, study := range body.Hits {
 			result_queue <- study.Accession
 		}
 
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	fmt.Println("Shutdown Search worker")
@@ -97,7 +113,7 @@ func main() {
 		return
 	}
 
-	totalPages := int(math.Min(math.Ceil(float64(body.TotalHits)/float64(body.PageSize)), 5))
+	totalPages := int(math.Ceil(float64(body.TotalHits) / float64(body.PageSize)))
 
 	wg := sync.WaitGroup{}
 	queue := make(chan int, constants.WORKER_NUMBER)

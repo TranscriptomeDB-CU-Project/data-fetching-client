@@ -13,7 +13,7 @@ import (
 
 func FetchWithRetry(url string, retry int) (*http.Response, error) {
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 60 * time.Second,
 	}
 
 	var res *http.Response
@@ -40,7 +40,7 @@ func FetchWithRetry(url string, retry int) (*http.Response, error) {
 }
 
 func FetchSearch(page int, target *dtos.SearchResult) error {
-	fetch_url := fmt.Sprintf("%s/arrayexpress/search?page=%d&pageSize=50", constants.API_URL, page)
+	fetch_url := fmt.Sprintf("%s/arrayexpress/search?page=%d&pageSize=100", constants.API_URL, page)
 
 	res, err := FetchWithRetry(fetch_url, 250)
 
@@ -72,8 +72,24 @@ func FetchAccessionInfo(accession string, target *dtos.StudyInfo) error {
 	return err
 }
 
-func FetchAccessionSDRFFile(accession string) ([]byte, error) {
-	url := fmt.Sprintf("%s/%s/%s.sdrf.txt", constants.FILE_BASE_URL, accession, accession)
+func FetchSDRFFileList(accession string, target *dtos.SearchFileResult) error {
+	fetch_url := fmt.Sprintf("%s/files/%s?search%%5Bvalue%%5D=sdrf", constants.API_URL, accession)
+
+	res, err := FetchWithRetry(fetch_url, 250)
+
+	if err != nil {
+		return err
+	}
+
+	defer res.Body.Close()
+
+	err = json.NewDecoder(res.Body).Decode(target)
+
+	return err
+}
+
+func FetchAccessionSDRFFile(accession string, filename string) ([]byte, error) {
+	url := fmt.Sprintf("%s/%s/%s", constants.FILE_BASE_URL, accession, filename)
 
 	res, err := FetchWithRetry(url, 250)
 
@@ -82,6 +98,10 @@ func FetchAccessionSDRFFile(accession string) ([]byte, error) {
 	}
 
 	defer res.Body.Close()
+
+	if res.ContentLength == 0 {
+		return nil, fmt.Errorf("empty body %s", filename)
+	}
 
 	data_byte, err := io.ReadAll(res.Body)
 
