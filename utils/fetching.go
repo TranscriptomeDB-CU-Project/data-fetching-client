@@ -12,6 +12,10 @@ import (
 )
 
 func FetchWithRetry(url string, retry int) (*http.Response, error) {
+	if retry > 10000 {
+		return nil, fmt.Errorf("retry limit exceeded")
+	}
+
 	client := &http.Client{
 		Timeout: 60 * time.Second,
 	}
@@ -22,10 +26,12 @@ func FetchWithRetry(url string, retry int) (*http.Response, error) {
 	res, err = client.Get(url)
 
 	// Network timeout or Rate Limit, let's do binary exponential backoff
-	if err != nil || res.StatusCode == 429 {
+	if err != nil || res.StatusCode == 500 {
 		fmt.Printf("retry %s %s\n", url, err)
 
 		time.Sleep(time.Duration(rand.Intn(retry)) * time.Millisecond)
+
+		res.Body.Close()
 
 		return FetchWithRetry(url, retry*2)
 	}
@@ -72,20 +78,28 @@ func FetchAccessionInfo(accession string, target *dtos.StudyInfo) error {
 	return err
 }
 
-func FetchSDRFFileList(accession string, target *dtos.SearchFileResult) error {
-	fetch_url := fmt.Sprintf("%s/files/%s?search%%5Bvalue%%5D=sdrf", constants.API_URL, accession)
+func FetchSDRFFileList(accession string) ([]string, error) {
+	fetch_url := fmt.Sprintf("%s/%s/%s.json", constants.FILE_BASE_URL, accession, accession)
 
 	res, err := FetchWithRetry(fetch_url, 250)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer res.Body.Close()
 
-	err = json.NewDecoder(res.Body).Decode(target)
+	var x dtos.AccessionMetadata
 
-	return err
+	err = json.NewDecoder(res.Body).Decode(&x)
+
+	if err != nil {
+		return nil, err
+	}
+
+	file_name := ExtractSDRFFileName(&x)
+
+	return file_name, nil
 }
 
 func FetchAccessionSDRFFile(accession string, filename string) ([]byte, error) {

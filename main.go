@@ -12,33 +12,45 @@ import (
 	"time"
 )
 
-func worker_fetch_accession(wg *sync.WaitGroup, queue chan string, metadata map[string]int) {
+func worker_fetch_accession(wg *sync.WaitGroup, queue chan string, metadata map[string][]dtos.ResultMetadata) {
 	defer wg.Done()
 
 	for accession := range queue {
 		fmt.Println("Start Accession: ", accession)
 
-		var file_result dtos.SearchFileResult
-
-		err := utils.FetchSDRFFileList(accession, &file_result)
+		file_list, err := utils.FetchSDRFFileList(accession)
 
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
 
-		for _, file := range file_result.Files {
-			new_file_name, _ := strings.CutSuffix(file.Name, ".sdrf.txt")
+		if len(file_list) == 0 {
+			metadata["NoSDRF"] = append(metadata["NoSDRF"], dtos.ResultMetadata{
+				Name: accession,
+			})
+		}
+
+		for _, file := range file_list {
+			new_file_name, _ := strings.CutSuffix(file, ".sdrf.txt")
 
 			if _, err := os.Stat(fmt.Sprintf("sdrf/%s.sdrf.csv", new_file_name)); err == nil {
-				fmt.Println("Skip: ", file.Name)
+				fmt.Println("Skip: ", file)
+
+				metadata["Skip"] = append(metadata["Skip"], dtos.ResultMetadata{
+					Name: accession,
+				})
+
 				continue
 			}
 
-			data_byte, err := utils.FetchAccessionSDRFFile(accession, file.Name)
+			data_byte, err := utils.FetchAccessionSDRFFile(accession, file)
 
 			if err != nil {
 				fmt.Println(err)
+				metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
+					Name: accession,
+				})
 				continue
 			}
 
@@ -61,9 +73,12 @@ func worker_fetch_accession(wg *sync.WaitGroup, queue chan string, metadata map[
 				continue
 			}
 
-			fmt.Println("Done Accession: ", file.Name)
+			fmt.Println("Done Accession: ", file)
 
-			metadata[new_file_name] = target.Modified
+			metadata["Success"] = append(metadata["Success"], dtos.ResultMetadata{
+				Name:         accession,
+				TimeModified: target.Modified,
+			})
 
 			time.Sleep(200 * time.Millisecond)
 		}
@@ -104,7 +119,7 @@ func worker_fetch_search(wg *sync.WaitGroup, queue chan int, result_queue chan s
 func main() {
 	var body dtos.SearchResult
 
-	accession_metadata := make(map[string]int)
+	accession_metadata := make(map[string][]dtos.ResultMetadata)
 
 	err := utils.FetchSearch(1, &body)
 
