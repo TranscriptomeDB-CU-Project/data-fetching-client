@@ -5,6 +5,7 @@ import (
 	"arrayexpress-fetch/dtos"
 	"arrayexpress-fetch/utils"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"strings"
@@ -29,6 +30,7 @@ func worker_fetch_accession(wg *sync.WaitGroup, queue chan string, metadata map[
 			metadata["NoSDRF"] = append(metadata["NoSDRF"], dtos.ResultMetadata{
 				Name: accession,
 			})
+			continue
 		}
 
 		for _, file := range file_list {
@@ -119,6 +121,8 @@ func worker_fetch_search(wg *sync.WaitGroup, queue chan int, result_queue chan s
 func main() {
 	var body dtos.SearchResult
 
+	start := time.Now()
+
 	accession_metadata := make(map[string][]dtos.ResultMetadata)
 
 	err := utils.FetchSearch(1, &body)
@@ -128,13 +132,13 @@ func main() {
 		return
 	}
 
-	totalPages := int(math.Ceil(float64(body.TotalHits) / float64(body.PageSize)))
+	totalPages := int(math.Min(math.Ceil(float64(body.TotalHits)/float64(body.PageSize)), 5))
 
 	wg := sync.WaitGroup{}
-	queue := make(chan int, constants.WORKER_NUMBER)
+	queue := make(chan int, constants.FETCH_SEARCH_WORKER)
 
 	wg_fetch_sdrf := sync.WaitGroup{}
-	accession_queue := make(chan string, constants.WORKER_NUMBER*7)
+	accession_queue := make(chan string, constants.FETCH_FILE_WORKER)
 
 	folder_name := "sdrf"
 
@@ -142,12 +146,12 @@ func main() {
 		os.Mkdir(folder_name, 0755)
 	}
 
-	for i := 1; i <= constants.WORKER_NUMBER; i++ {
+	for i := 1; i <= constants.FETCH_SEARCH_WORKER; i++ {
 		wg.Add(1)
 		go worker_fetch_search(&wg, queue, accession_queue)
 	}
 
-	for i := 1; i <= constants.WORKER_NUMBER; i++ {
+	for i := 1; i <= constants.FETCH_FILE_WORKER; i++ {
 		wg_fetch_sdrf.Add(1)
 		go worker_fetch_accession(&wg_fetch_sdrf, accession_queue, accession_metadata)
 	}
@@ -167,7 +171,7 @@ func main() {
 	fmt.Println("Done Accession")
 
 	// Write map[string]int to file
-	fp, err := os.OpenFile("metadata.csv", os.O_RDWR|os.O_CREATE, 0755)
+	fp, err := os.OpenFile("metadata.txt", os.O_RDWR|os.O_CREATE, 0755)
 
 	if err != nil {
 		fmt.Println("Read Failed: ", err)
@@ -179,10 +183,17 @@ func main() {
 	}
 	defer fp.Close()
 
-	fp.WriteString("accession,modified\n")
-	for k, v := range accession_metadata {
-		fp.WriteString(fmt.Sprintf("%s,%d\n", k, v))
+	for key, value := range accession_metadata {
+		fp.WriteString(fmt.Sprintf("%s: ", key))
+
+		for _, accession := range value {
+			fp.WriteString(fmt.Sprintf("%s,", accession.Name))
+		}
+
+		fp.WriteString("\n")
 	}
 
 	fmt.Println("Total Accession: ", len(accession_metadata))
+
+	log.Printf("Time took: %s", time.Since(start))
 }

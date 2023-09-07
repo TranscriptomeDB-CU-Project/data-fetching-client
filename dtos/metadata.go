@@ -17,11 +17,11 @@ type ResultMetadata struct {
 }
 
 type SubsectionMetadata struct {
-	Accno       string                    `json:"accno"`
-	Type        string                    `json:"type"`
-	Attributes  []Attributes              `json:"attributes"`
-	Subsections []SubsectionMetadata      `json:"subsections"`
-	Files       [][]AccessionFileMetadata `json:"files"`
+	Accno       string        `json:"accno"`
+	Type        string        `json:"type"`
+	Attributes  []Attributes  `json:"attributes"`
+	Subsections []interface{} `json:"subsections"`
+	Files       []interface{} `json:"files"`
 }
 
 type SectionMetadata struct {

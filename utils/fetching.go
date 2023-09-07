@@ -89,15 +89,15 @@ func FetchSDRFFileList(accession string) ([]string, error) {
 
 	defer res.Body.Close()
 
-	var x dtos.AccessionMetadata
+	// var x dtos.AccessionMetadata
 
-	err = json.NewDecoder(res.Body).Decode(&x)
+	b, err := io.ReadAll(res.Body)
 
 	if err != nil {
 		return nil, err
 	}
 
-	file_name := ExtractSDRFFileName(&x)
+	file_name := ExtractSDRFFileName(string(b))
 
 	return file_name, nil
 }
