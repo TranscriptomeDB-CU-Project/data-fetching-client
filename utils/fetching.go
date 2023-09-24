@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -45,8 +46,14 @@ func FetchWithRetry(url string, retry int) (*http.Response, error) {
 	return res, nil
 }
 
-func FetchSearch(page int, target *dtos.SearchResult) error {
-	fetch_url := fmt.Sprintf("%s/arrayexpress/search?page=%d&pageSize=100", constants.API_URL, page)
+func FetchSearch(species string, page int, target *dtos.SearchResult) error {
+	species_query := strings.ReplaceAll(species, " ", "+")
+
+	if species_query != "" {
+		species_query = fmt.Sprintf("&facet.organism=%s", species_query)
+	}
+
+	fetch_url := fmt.Sprintf("%s/arrayexpress/search?page=%d&pageSize=100%s", constants.API_URL, page, species_query)
 
 	res, err := FetchWithRetry(fetch_url, 250)
 
@@ -88,8 +95,6 @@ func FetchSDRFFileList(accession string) ([]string, error) {
 	}
 
 	defer res.Body.Close()
-
-	// var x dtos.AccessionMetadata
 
 	b, err := io.ReadAll(res.Body)
 
