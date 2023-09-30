@@ -41,6 +41,9 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 
 		if err != nil {
 			fmt.Println(err)
+			metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
+				Name: accession,
+			})
 			continue
 		}
 
@@ -48,6 +51,7 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 			metadata["NoSDRF"] = append(metadata["NoSDRF"], dtos.ResultMetadata{
 				Name: accession,
 			})
+			time_stamp[accession] = int64(target.Modified)
 			continue
 		}
 
@@ -62,18 +66,25 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 
 			if err != nil {
 				fmt.Println(err)
-				isFailed = true
+
+				if err.Code != 404 {
+					isFailed = true
+				}
+
 				metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
 					Name: accession,
 				})
 				continue
 			}
 
-			fp, err := os.OpenFile(fmt.Sprintf("%ssdrf/%s.sdrf.csv", constants.FILE_BASE_PATH, new_file_name), os.O_RDWR|os.O_CREATE, 0755)
+			fp, _err := os.OpenFile(fmt.Sprintf("%ssdrf/%s.sdrf.csv", constants.FILE_BASE_PATH, new_file_name), os.O_RDWR|os.O_CREATE, 0755)
 
-			if err != nil {
-				fmt.Println("Read Failed: ", err)
+			if _err != nil {
+				fmt.Println("Read Failed: ", _err)
 				isFailed = true
+				metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
+					Name: accession,
+				})
 				continue
 			}
 

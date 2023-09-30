@@ -12,9 +12,12 @@ import (
 	"time"
 )
 
-func FetchWithRetry(url string, retry int) (*http.Response, error) {
+func FetchWithRetry(url string, retry int) (*http.Response, *dtos.ErrorResponse) {
 	if retry > 10000 {
-		return nil, fmt.Errorf("retry limit exceeded")
+		return nil, &dtos.ErrorResponse{
+			Code:    500,
+			Message: "Retry limit exceeded",
+		}
 	}
 
 	client := &http.Client{
@@ -38,15 +41,18 @@ func FetchWithRetry(url string, retry int) (*http.Response, error) {
 	}
 
 	if res.StatusCode != 200 {
-		err = fmt.Errorf("fetch failed: %s %s", res.Status, url)
+		errMsg := fmt.Sprintf("fetch failed: %s", err.Error())
 
-		return nil, err
+		return nil, &dtos.ErrorResponse{
+			Code:    res.StatusCode,
+			Message: errMsg,
+		}
 	}
 
 	return res, nil
 }
 
-func FetchSearch(species string, page int, target *dtos.SearchResult) error {
+func FetchSearch(species string, page int, target *dtos.SearchResult) *dtos.ErrorResponse {
 	species_query := strings.ReplaceAll(species, " ", "+")
 
 	if species_query != "" {
@@ -64,12 +70,15 @@ func FetchSearch(species string, page int, target *dtos.SearchResult) error {
 	defer res.Body.Close()
 
 	// Read body
-	err = json.NewDecoder(res.Body).Decode(target)
+	_err := json.NewDecoder(res.Body).Decode(target)
 
-	return err
+	return &dtos.ErrorResponse{
+		Code:    500,
+		Message: _err.Error(),
+	}
 }
 
-func FetchAccessionInfo(accession string, target *dtos.StudyInfo) error {
+func FetchAccessionInfo(accession string, target *dtos.StudyInfo) *dtos.ErrorResponse {
 	fetch_url := fmt.Sprintf("%s/studies/%s/info", constants.API_URL, accession)
 
 	res, err := FetchWithRetry(fetch_url, 250)
@@ -80,12 +89,15 @@ func FetchAccessionInfo(accession string, target *dtos.StudyInfo) error {
 
 	defer res.Body.Close()
 
-	err = json.NewDecoder(res.Body).Decode(target)
+	_err := json.NewDecoder(res.Body).Decode(target)
 
-	return err
+	return &dtos.ErrorResponse{
+		Code:    500,
+		Message: _err.Error(),
+	}
 }
 
-func FetchSDRFFileList(accession string) ([]string, error) {
+func FetchSDRFFileList(accession string) ([]string, *dtos.ErrorResponse) {
 	fetch_url := fmt.Sprintf("%s/%s/%s.json", constants.FILE_BASE_URL, accession, accession)
 
 	res, err := FetchWithRetry(fetch_url, 250)
@@ -96,10 +108,13 @@ func FetchSDRFFileList(accession string) ([]string, error) {
 
 	defer res.Body.Close()
 
-	b, err := io.ReadAll(res.Body)
+	b, _err := io.ReadAll(res.Body)
 
 	if err != nil {
-		return nil, err
+		return nil, &dtos.ErrorResponse{
+			Code:    500,
+			Message: _err.Error(),
+		}
 	}
 
 	file_name := ExtractSDRFFileName(string(b))
@@ -107,7 +122,7 @@ func FetchSDRFFileList(accession string) ([]string, error) {
 	return file_name, nil
 }
 
-func FetchAccessionSDRFFile(accession string, filename string) ([]byte, error) {
+func FetchAccessionSDRFFile(accession string, filename string) ([]byte, *dtos.ErrorResponse) {
 	url := fmt.Sprintf("%s/%s/%s", constants.FILE_BASE_URL, accession, filename)
 
 	res, err := FetchWithRetry(url, 250)
@@ -119,10 +134,20 @@ func FetchAccessionSDRFFile(accession string, filename string) ([]byte, error) {
 	defer res.Body.Close()
 
 	if res.ContentLength == 0 {
-		return nil, fmt.Errorf("empty body %s", filename)
+		return nil, &dtos.ErrorResponse{
+			Code:    404,
+			Message: "File not found",
+		}
 	}
 
-	data_byte, err := io.ReadAll(res.Body)
+	data_byte, _err := io.ReadAll(res.Body)
 
-	return data_byte, err
+	if _err != nil {
+		return nil, &dtos.ErrorResponse{
+			Code:    500,
+			Message: _err.Error(),
+		}
+	}
+
+	return data_byte, nil
 }
