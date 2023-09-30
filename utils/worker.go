@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"arrayexpress-fetch/constants"
 	"arrayexpress-fetch/dtos"
 	"fmt"
 	"os"
@@ -36,8 +37,6 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 			continue
 		}
 
-		time_stamp[accession] = int64(target.Modified)
-
 		file_list, err := FetchSDRFFileList(accession)
 
 		if err != nil {
@@ -52,6 +51,8 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 			continue
 		}
 
+		isFailed := false
+
 		for _, file := range file_list {
 			time.Sleep(200 * time.Millisecond)
 
@@ -61,16 +62,18 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 
 			if err != nil {
 				fmt.Println(err)
+				isFailed = true
 				metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
 					Name: accession,
 				})
 				continue
 			}
 
-			fp, err := os.OpenFile(fmt.Sprintf("sdrf/%s.sdrf.csv", new_file_name), os.O_RDWR|os.O_CREATE, 0755)
+			fp, err := os.OpenFile(fmt.Sprintf("%ssdrf/%s.sdrf.csv", constants.FILE_BASE_PATH, new_file_name), os.O_RDWR|os.O_CREATE, 0755)
 
 			if err != nil {
 				fmt.Println("Read Failed: ", err)
+				isFailed = true
 				continue
 			}
 
@@ -82,6 +85,10 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 			metadata["Success"] = append(metadata["Success"], dtos.ResultMetadata{
 				Name: accession,
 			})
+		}
+
+		if !isFailed {
+			time_stamp[accession] = int64(target.Modified)
 		}
 	}
 

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"arrayexpress-fetch/constants"
 	"arrayexpress-fetch/dtos"
 	"encoding/csv"
 	"fmt"
@@ -9,7 +10,7 @@ import (
 )
 
 func WriteMetadata(metadata map[string][]dtos.ResultMetadata) {
-	fp, err := os.OpenFile("metadata.txt", os.O_RDWR|os.O_CREATE, 0755)
+	fp, err := os.OpenFile(fmt.Sprintf("%smetadata.txt", constants.FILE_BASE_PATH), os.O_RDWR|os.O_CREATE, 0755)
 
 	if err != nil {
 		fmt.Println("Read Failed: ", err)
@@ -30,7 +31,7 @@ func WriteMetadata(metadata map[string][]dtos.ResultMetadata) {
 }
 
 func WriteTimestamp(timestamp map[string]int64) {
-	fp_time, err := os.OpenFile("timestamp.txt", os.O_RDWR|os.O_CREATE, 0755)
+	fp_time, err := os.OpenFile(fmt.Sprintf("%stimestamp.txt", constants.FILE_BASE_PATH), os.O_RDWR|os.O_CREATE, 0755)
 
 	if err != nil {
 		fmt.Println("Read Failed: ", err)
@@ -49,7 +50,7 @@ func WriteTimestamp(timestamp map[string]int64) {
 func ReadTimestamp() map[string]int64 {
 	timestamp := make(map[string]int64)
 
-	fp, err := os.Open("timestamp.txt")
+	fp, err := os.Open(fmt.Sprintf("%stimestamp.txt", constants.FILE_BASE_PATH))
 
 	if err != nil {
 		fmt.Println("Read Failed: ", err)

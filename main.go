@@ -13,6 +13,8 @@ import (
 )
 
 func main() {
+	constants.LoadFileBasePath()
+
 	var body dtos.SearchResult
 
 	start := time.Now()
@@ -35,7 +37,7 @@ func main() {
 	wg_fetch_sdrf := sync.WaitGroup{}
 	accession_queue := make(chan string, constants.FETCH_FILE_WORKER)
 
-	folder_name := "sdrf"
+	folder_name := fmt.Sprintf("%ssdrf", constants.FILE_BASE_PATH)
 
 	if _, err := os.Stat(folder_name); err != nil {
 		os.Mkdir(folder_name, 0755)
