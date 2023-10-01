@@ -3,10 +3,14 @@ package utils
 import (
 	"arrayexpress-fetch/constants"
 	"arrayexpress-fetch/dtos"
-	"encoding/csv"
+	"context"
 	"fmt"
 	"os"
-	"strconv"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func WriteMetadata(metadata map[string][]dtos.ResultMetadata) {
@@ -30,56 +34,47 @@ func WriteMetadata(metadata map[string][]dtos.ResultMetadata) {
 	}
 }
 
-func WriteTimestamp(timestamp map[string]int64) {
-	fp_time, err := os.OpenFile(fmt.Sprintf("%stimestamp.txt", constants.FILE_BASE_PATH), os.O_RDWR|os.O_CREATE, 0755)
-
-	if err != nil {
-		fmt.Println("Read Failed: ", err)
-		return
-	}
-
-	defer fp_time.Close()
-
-	fp_time.WriteString("accession,timestamp\n")
+func WriteTimestamp(timestamp map[string]int64, mongoClient *mongo.Client) {
+	current_time := time.Now().UnixMilli()
 
 	for key, value := range timestamp {
-		fp_time.WriteString(fmt.Sprintf("%s,%d\n", key, value))
+		_, err := mongoClient.Database("arrayexpress").Collection("timestamp").UpdateOne(context.Background(), bson.M{
+			"accession": key,
+		}, bson.M{
+			"$set": dtos.AccessionLogs{
+				Accession:  key,
+				ModifiedAt: value,
+				FetchedAt:  current_time,
+			}}, options.Update().SetUpsert(true))
+
+		if err != nil {
+			fmt.Println("Write Failed: ", err)
+			return
+		}
 	}
 }
 
-func ReadTimestamp() map[string]int64 {
-	timestamp := make(map[string]int64)
+func ReadTimestamp(mongoClient *mongo.Client) map[string]int64 {
+	cur, err := mongoClient.Database("arrayexpress").Collection("timestamp").Find(context.TODO(), bson.M{})
 
-	fp, err := os.Open(fmt.Sprintf("%stimestamp.txt", constants.FILE_BASE_PATH))
+	timestamps := make(map[string]int64)
 
 	if err != nil {
 		fmt.Println("Read Failed: ", err)
-		return timestamp
+		return timestamps
 	}
 
-	defer fp.Close()
+	for cur.Next(context.Background()) {
+		var log dtos.AccessionLogs
+		err := cur.Decode(&log)
 
-	// Read CSV of fp
-	fileReader := csv.NewReader(fp)
-
-	records, err := fileReader.ReadAll()
-	if err != nil {
-		fmt.Println("Read Failed: ", err)
-		return timestamp
-	}
-
-	for _, record := range records {
-		if len(record) == 2 {
-			t, err := strconv.ParseInt(record[1], 10, 64)
-
-			if err != nil {
-				fmt.Println("Read Failed: ", err)
-				continue
-			}
-
-			timestamp[record[0]] = t
+		if err != nil {
+			fmt.Println("Read Failed: ", err)
+			continue
 		}
+
+		timestamps[log.Accession] = int64(log.ModifiedAt)
 	}
 
-	return timestamp
+	return timestamps
 }

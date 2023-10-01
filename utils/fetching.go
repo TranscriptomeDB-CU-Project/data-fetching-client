@@ -41,7 +41,7 @@ func FetchWithRetry(url string, retry int) (*http.Response, *dtos.ErrorResponse)
 	}
 
 	if res.StatusCode != 200 {
-		errMsg := fmt.Sprintf("fetch failed: %s", err.Error())
+		errMsg := fmt.Sprintf("fetch failed: %d", res.StatusCode)
 
 		return nil, &dtos.ErrorResponse{
 			Code:    res.StatusCode,
@@ -72,10 +72,14 @@ func FetchSearch(species string, page int, target *dtos.SearchResult) *dtos.Erro
 	// Read body
 	_err := json.NewDecoder(res.Body).Decode(target)
 
-	return &dtos.ErrorResponse{
-		Code:    500,
-		Message: _err.Error(),
+	if _err != nil {
+		return &dtos.ErrorResponse{
+			Code:    500,
+			Message: _err.Error(),
+		}
 	}
+
+	return nil
 }
 
 func FetchAccessionInfo(accession string, target *dtos.StudyInfo) *dtos.ErrorResponse {
@@ -91,10 +95,14 @@ func FetchAccessionInfo(accession string, target *dtos.StudyInfo) *dtos.ErrorRes
 
 	_err := json.NewDecoder(res.Body).Decode(target)
 
-	return &dtos.ErrorResponse{
-		Code:    500,
-		Message: _err.Error(),
+	if _err != nil {
+		return &dtos.ErrorResponse{
+			Code:    500,
+			Message: _err.Error(),
+		}
 	}
+
+	return nil
 }
 
 func FetchSDRFFileList(accession string) ([]string, *dtos.ErrorResponse) {

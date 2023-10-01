@@ -23,7 +23,7 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 		err := FetchAccessionInfo(accession, &target)
 
 		if err != nil {
-			fmt.Println("Failed to fetch", err)
+			fmt.Println("Failed to fetch", err.Code, err.Message)
 			continue
 		}
 
