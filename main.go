@@ -40,8 +40,8 @@ func main() {
 
 	start := time.Now()
 
-	accession_metadata := make(map[string][]dtos.ResultMetadata)
-	time_stamp := utils.ReadTimestamp(client)
+	accession_metadata := sync.Map{}
+	time_stamp := utils.ReadMetadata(client)
 
 	err := utils.FetchSearch("homo sapiens", 1, &body)
 
@@ -71,7 +71,7 @@ func main() {
 
 	for i := 1; i <= constants.FETCH_FILE_WORKER; i++ {
 		wg_fetch_sdrf.Add(1)
-		go utils.WorkerFetchAccession(&wg_fetch_sdrf, accession_queue, accession_metadata, time_stamp)
+		go utils.WorkerFetchAccession(&wg_fetch_sdrf, accession_queue, &accession_metadata, time_stamp)
 	}
 
 	for i := 1; i <= totalPages; i++ {
@@ -84,8 +84,7 @@ func main() {
 	close(accession_queue)
 	wg_fetch_sdrf.Wait()
 
-	utils.WriteMetadata(accession_metadata)
-	utils.WriteTimestamp(time_stamp, client)
+	utils.WriteMetadata(time_stamp, &accession_metadata, client)
 
 	log.Printf("Time took: %s", time.Since(start))
 }

@@ -1,11 +1,10 @@
 package utils
 
 import (
-	"arrayexpress-fetch/constants"
 	"arrayexpress-fetch/dtos"
 	"context"
 	"fmt"
-	"os"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,55 +12,42 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func WriteMetadata(metadata map[string][]dtos.ResultMetadata) {
-	fp, err := os.OpenFile(fmt.Sprintf("%smetadata.txt", constants.FILE_BASE_PATH), os.O_RDWR|os.O_CREATE, 0755)
-
-	if err != nil {
-		fmt.Println("Read Failed: ", err)
-		return
-	}
-
-	defer fp.Close()
-
-	for key, value := range metadata {
-		fp.WriteString(fmt.Sprintf("%s: ", key))
-
-		for _, accession := range value {
-			fp.WriteString(fmt.Sprintf("%s,", accession.Name))
-		}
-
-		fp.WriteString("\n")
-	}
-}
-
-func WriteTimestamp(timestamp map[string]int64, mongoClient *mongo.Client) {
+func WriteMetadata(timestamp *sync.Map, status *sync.Map, mongoClient *mongo.Client) {
 	current_time := time.Now().UnixMilli()
 
-	for key, value := range timestamp {
-		_, err := mongoClient.Database("arrayexpress").Collection("timestamp").UpdateOne(context.Background(), bson.M{
+	status.Range(func(key, value interface{}) bool {
+		dataModifiedAt, ok := timestamp.Load(key)
+
+		body := dtos.AccessionLogs{
+			Accession: key.(string),
+			Status:    value.(string),
+			FetchedAt: current_time,
+		}
+
+		if ok {
+			body.ModifiedAt = dataModifiedAt.(int64)
+		}
+
+		_, err := mongoClient.Database("arrayexpress").Collection("accession").UpdateOne(context.Background(), bson.M{
 			"accession": key,
-		}, bson.M{
-			"$set": dtos.AccessionLogs{
-				Accession:  key,
-				ModifiedAt: value,
-				FetchedAt:  current_time,
-			}}, options.Update().SetUpsert(true))
+		}, bson.M{"$set": body}, options.Update().SetUpsert(true))
 
 		if err != nil {
 			fmt.Println("Write Failed: ", err)
-			return
 		}
-	}
+
+		return true
+	})
 }
 
-func ReadTimestamp(mongoClient *mongo.Client) map[string]int64 {
-	cur, err := mongoClient.Database("arrayexpress").Collection("timestamp").Find(context.TODO(), bson.M{})
+func ReadMetadata(mongoClient *mongo.Client) *sync.Map {
+	cur, err := mongoClient.Database("arrayexpress").Collection("accession").Find(context.TODO(), bson.M{})
 
-	timestamps := make(map[string]int64)
+	timestamps := sync.Map{}
 
 	if err != nil {
 		fmt.Println("Read Failed: ", err)
-		return timestamps
+		return &timestamps
 	}
 
 	for cur.Next(context.Background()) {
@@ -73,8 +59,8 @@ func ReadTimestamp(mongoClient *mongo.Client) map[string]int64 {
 			continue
 		}
 
-		timestamps[log.Accession] = int64(log.ModifiedAt)
+		timestamps.Store(log.Accession, int64(log.ModifiedAt))
 	}
 
-	return timestamps
+	return &timestamps
 }

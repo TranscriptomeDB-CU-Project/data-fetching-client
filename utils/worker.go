@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[string][]dtos.ResultMetadata, time_stamp map[string]int64) {
+func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata *sync.Map, time_stamp *sync.Map) {
 	defer wg.Done()
 
 	for accession := range queue {
@@ -29,10 +29,8 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 
 		current_time := time.Unix(0, int64(target.Modified)*int64(time.Millisecond))
 
-		if _metadata, ok := time_stamp[accession]; ok && current_time.Before(time.Unix(0, int64(_metadata)*int64(time.Millisecond)+int64(7*24*time.Hour))) {
-			metadata["Uptodate"] = append(metadata["Uptodate"], dtos.ResultMetadata{
-				Name: accession,
-			})
+		if _metadata, ok := time_stamp.Load(accession); ok && current_time.Before(time.Unix(0, _metadata.(int64)*int64(time.Millisecond)+int64(7*24*time.Hour))) {
+			metadata.Store(accession, "Up to date")
 			fmt.Println("Uptodate: ", accession)
 			continue
 		}
@@ -40,18 +38,15 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 		file_list, err := FetchSDRFFileList(accession)
 
 		if err != nil {
+			metadata.Store(accession, "Failed")
 			fmt.Println(err)
-			metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
-				Name: accession,
-			})
 			continue
 		}
 
 		if len(file_list) == 0 {
-			metadata["NoSDRF"] = append(metadata["NoSDRF"], dtos.ResultMetadata{
-				Name: accession,
-			})
-			time_stamp[accession] = int64(target.Modified)
+			metadata.Store(accession, "No SDRF")
+
+			time_stamp.Store(accession, int64(target.Modified))
 			continue
 		}
 
@@ -67,13 +62,11 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 			if err != nil {
 				fmt.Println(err)
 
-				if err.Code != 404 {
+				if err.Code != 404 && err.Code != 403 {
 					isFailed = true
+					metadata.Store(accession, "Failed")
 				}
 
-				metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
-					Name: accession,
-				})
 				continue
 			}
 
@@ -82,9 +75,8 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 			if _err != nil {
 				fmt.Println("Read Failed: ", _err)
 				isFailed = true
-				metadata["Failed"] = append(metadata["Failed"], dtos.ResultMetadata{
-					Name: accession,
-				})
+
+				metadata.Store(accession, "Failed")
 				continue
 			}
 
@@ -93,13 +85,11 @@ func WorkerFetchAccession(wg *sync.WaitGroup, queue chan string, metadata map[st
 
 			fmt.Println("Done Accession: ", file)
 
-			metadata["Success"] = append(metadata["Success"], dtos.ResultMetadata{
-				Name: accession,
-			})
+			metadata.Store(accession, "Success")
 		}
 
 		if !isFailed {
-			time_stamp[accession] = int64(target.Modified)
+			time_stamp.Store(accession, int64(target.Modified))
 		}
 	}
 

@@ -35,8 +35,6 @@ func FetchWithRetry(url string, retry int) (*http.Response, *dtos.ErrorResponse)
 
 		time.Sleep(time.Duration(rand.Intn(retry)) * time.Millisecond)
 
-		res.Body.Close()
-
 		return FetchWithRetry(url, retry*2)
 	}
 
