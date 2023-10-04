@@ -50,7 +50,7 @@ func main() {
 		return
 	}
 
-	totalPages := int(math.Min(math.Ceil(float64(body.TotalHits)/float64(body.PageSize)), 1))
+	totalPages := int(math.Ceil(float64(body.TotalHits) / float64(body.PageSize)))
 
 	wg := sync.WaitGroup{}
 	queue := make(chan int, constants.FETCH_SEARCH_WORKER)

@@ -13,6 +13,6 @@ type Study struct {
 }
 
 type StudyInfo struct {
-	Released int `json:"released"`
-	Modified int `json:"modified"`
+	Released int64 `json:"released"`
+	Modified int64 `json:"modified"`
 }
