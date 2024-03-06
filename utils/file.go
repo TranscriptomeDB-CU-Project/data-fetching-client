@@ -14,6 +14,9 @@ import (
 
 func WriteMetadata(timestamp *sync.Map, status *sync.Map, mongoClient *mongo.Client) {
 	current_time := time.Now().UnixMilli()
+	BULK_SIZE := 50
+	write_model := make([]mongo.WriteModel, BULK_SIZE)
+	idx := 0
 
 	status.Range(func(key, value interface{}) bool {
 		dataModifiedAt, ok := timestamp.Load(key)
@@ -28,16 +31,27 @@ func WriteMetadata(timestamp *sync.Map, status *sync.Map, mongoClient *mongo.Cli
 			body.ModifiedAt = dataModifiedAt.(int64)
 		}
 
-		_, err := mongoClient.Database("arrayexpress").Collection("accession").UpdateOne(context.Background(), bson.M{
-			"accession": key,
-		}, bson.M{"$set": body}, options.Update().SetUpsert(true))
+		write_model[idx] = mongo.NewUpdateOneModel().SetFilter(bson.M{"accession": key}).SetUpdate(bson.M{"$set": body}).SetUpsert(true)
+		idx++
 
-		if err != nil {
-			fmt.Println("Write Failed: ", err)
+		if idx == BULK_SIZE {
+			_, err := mongoClient.Database("arrayexpress").Collection("accession").BulkWrite(context.Background(), write_model, options.BulkWrite().SetOrdered(false))
+			if err != nil {
+				fmt.Println("Write Failed: ", err)
+			}
+			idx = 0
 		}
 
 		return true
 	})
+
+	if idx > 0 {
+		write_model = write_model[:idx]
+		_, err := mongoClient.Database("arrayexpress").Collection("accession").BulkWrite(context.Background(), write_model, options.BulkWrite().SetOrdered(false))
+		if err != nil {
+			fmt.Println("Write Failed: ", err)
+		}
+	}
 }
 
 func ReadMetadata(mongoClient *mongo.Client) *sync.Map {
