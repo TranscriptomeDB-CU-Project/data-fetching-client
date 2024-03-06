@@ -14,7 +14,7 @@ import (
 
 func WriteMetadata(timestamp *sync.Map, status *sync.Map, mongoClient *mongo.Client) {
 	current_time := time.Now().UnixMilli()
-	BULK_SIZE := 50
+	BULK_SIZE := 10000
 	write_model := make([]mongo.WriteModel, BULK_SIZE)
 	idx := 0
 
